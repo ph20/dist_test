@@ -38,24 +38,16 @@ def filter_free_space(mount_points, min_free_space):
             yield mount_point
 
 
-def get_tmp_dir(min_free_space):
+def get_root_dir(min_free_space):
     path = next(filter_free_space(get_local_mount_points(), min_free_space))
-
-    # check if present /tmp directory is on the same mount point
-    if path == '/tmp':
-        pass
-
-    # create a temporary directory
-    tmp_dir = tempfile.mkdtemp(dir=path + 'tmp')
-    return tmp_dir
+    return path
 
 
-def main(min_free_space, file_size, file_count):
-    tmp_dir = get_tmp_dir(min_free_space)
+def test_write(file_size, file_count, dir_path):
     dd_ps_pool = []
     end_time = start_time = time.time()
     for i in range(file_count):
-        file_path = f'{tmp_dir}/file{i}'
+        file_path = f'{dir_path}/file{i}'
         print(f'Creating file {file_path} with size {file_size}...')
         dd_ps = subprocess.Popen([DD_BIN, 'if=/dev/zero', f'of={file_path}', f'bs={file_size}', 'count=1'],
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -69,6 +61,13 @@ def main(min_free_space, file_size, file_count):
     return end_time - start_time
 
 
+def main(min_free_space, file_size, file_count):
+    root_dir = get_root_dir(min_free_space)
+    with tempfile.TemporaryDirectory(dir=root_dir) as tmp_dir:
+        time_took = test_write(file_size, file_count, tmp_dir)
+    return time_took
+
+
 if __name__ == '__main__':
     try:
         min_free_space, file_size, file_count = sys.argv[1:]
@@ -77,5 +76,9 @@ if __name__ == '__main__':
     except ValueError:
         print(f'Usage: {sys.argv[0]} min_free_space (MB) file_size (MB) file_count. F.e. 5000 100 10')
         sys.exit(1)
-    time_took = main(min_free_space, file_size, file_count)
-    print(f'Time took: {time_took:.2f} seconds')
+    try:
+        time_took = main(min_free_space, file_size, file_count)
+        print(f'Time took: {time_took:.2f} seconds')
+    except PermissionError as e:
+        print(f'Permission error: {e}')
+        sys.exit(1)
