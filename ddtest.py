@@ -33,14 +33,24 @@ def get_local_mount_points():
 
 
 def filter_free_space(mount_points, min_free_space):
+    mount_point_list = []
     for mount_point in mount_points:
-        if psutil.disk_usage(mount_point).free > min_free_space:
-            yield mount_point
+        try:
+            free_space = psutil.disk_usage(mount_point).free
+        except PermissionError as e:
+            free_space = 0
+            print(f'WARN: Can\'t obtaine free space for {mount_point}: {e}', file=sys.stderr)
+        if free_space > min_free_space:
+            mount_point_list.append(mount_point)
+    return mount_point_list
 
 
 def get_root_dir(min_free_space):
-    path = next(filter_free_space(get_local_mount_points(), min_free_space))
-    return path
+    path_list = filter_free_space(get_local_mount_points(), min_free_space)
+    if not path_list:
+        print('No mount points with enough free space', file=sys.stderr)
+        sys.exit(1)
+    return path_list[0]
 
 
 def test_write(file_size, file_count, dir_path):
@@ -74,11 +84,8 @@ if __name__ == '__main__':
         min_free_space, file_size = mega_bytes(int(min_free_space)), mega_bytes(int(file_size))
         file_count = int(file_count)
     except ValueError:
-        print(f'Usage: {sys.argv[0]} min_free_space (MB) file_size (MB) file_count. F.e. 5000 100 10')
+        print(f'Usage: {sys.argv[0]} min_free_space (MB) file_size (MB) file_count. F.e. 5000 100 10', file=sys.stderr)
         sys.exit(1)
-    try:
-        time_took = main(min_free_space, file_size, file_count)
-        print(f'Time took: {time_took:.2f} seconds')
-    except PermissionError as e:
-        print(f'Permission error: {e}')
-        sys.exit(1)
+
+    time_took = main(min_free_space, file_size, file_count)
+    print(f'Time took: {time_took:.2f} seconds')
